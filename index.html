@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reticulocyte Review - Pathologist UI</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; }
+
+  /* Upload Screen */
+  .upload-screen {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 100vh; gap: 20px; padding: 40px;
+  }
+  .upload-screen.hidden { display: none; }
+  .upload-screen h1 { font-size: 32px; }
+  .upload-screen h1 span { color: #60a5fa; }
+  .upload-screen p { color: #94a3b8; font-size: 14px; max-width: 600px; text-align: center; line-height: 1.6; }
+
+  .upload-steps {
+    display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; max-width: 900px;
+  }
+  .upload-card {
+    border: 2px dashed #475569; border-radius: 12px; padding: 28px 24px;
+    text-align: center; cursor: pointer; transition: all 0.2s; width: 260px;
+  }
+  .upload-card:hover { border-color: #60a5fa; background: #1e293b; }
+  .upload-card.done { border-color: #4ade80; border-style: solid; background: #4ade8010; }
+  .upload-card input { display: none; }
+  .upload-card .step-num {
+    background: #334155; color: #94a3b8; width: 28px; height: 28px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; margin-bottom: 8px;
+  }
+  .upload-card.done .step-num { background: #4ade80; color: #0f172a; }
+  .upload-card .step-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+  .upload-card .step-desc { font-size: 12px; color: #64748b; }
+  .upload-card .step-status { font-size: 12px; margin-top: 8px; color: #4ade80; font-weight: 600; }
+
+  .btn-start {
+    padding: 12px 40px; border-radius: 8px; border: none; cursor: pointer;
+    font-size: 16px; font-weight: 700; background: #3b82f6; color: white;
+    margin-top: 12px; transition: background 0.2s;
+  }
+  .btn-start:hover { background: #2563eb; }
+  .btn-start:disabled { opacity: 0.4; cursor: default; }
+
+  /* Review Screen */
+  .review-screen { display: none; }
+  .review-screen.active { display: block; }
+
+  .header {
+    background: #1e293b; padding: 14px 24px; display: flex; align-items: center;
+    justify-content: space-between; border-bottom: 1px solid #334155;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .header h1 { font-size: 18px; }
+  .header h1 span { color: #60a5fa; }
+
+  .stats { display: flex; gap: 20px; align-items: center; }
+  .stat { text-align: center; }
+  .stat-val { font-size: 20px; font-weight: 700; }
+  .stat-val.rbc { color: #4ade80; }
+  .stat-val.retic { color: #f87171; }
+  .stat-val.total { color: #60a5fa; }
+  .stat-label { color: #94a3b8; font-size: 10px; text-transform: uppercase; }
+  .relabel-count {
+    background: #f59e0b; color: #0f172a; padding: 4px 10px;
+    border-radius: 12px; font-size: 12px; font-weight: 700;
+  }
+
+  .toolbar {
+    background: #1e293b; padding: 10px 24px; display: flex; gap: 10px;
+    align-items: center; flex-wrap: wrap; border-bottom: 1px solid #334155;
+  }
+  .toolbar label { color: #94a3b8; font-size: 12px; }
+  .toolbar select {
+    background: #0f172a; color: #e2e8f0; border: 1px solid #475569;
+    padding: 5px 8px; border-radius: 6px; font-size: 12px;
+  }
+  .toolbar button {
+    padding: 6px 14px; border-radius: 6px; border: none; cursor: pointer;
+    font-size: 12px; font-weight: 600;
+  }
+  .btn-export { background: #3b82f6; color: white; }
+  .btn-export:hover { background: #2563eb; }
+  .btn-new { background: #f59e0b; color: #0f172a; }
+  .btn-new:hover { background: #d97706; }
+  .btn-nav { background: #475569; color: white; }
+  .btn-nav:hover { background: #64748b; }
+  .btn-nav:disabled { opacity: 0.4; cursor: default; }
+  .page-info { color: #94a3b8; font-size: 12px; margin-left: auto; }
+
+  /* Grid */
+  .grid {
+    display: grid; grid-template-columns: repeat(6, 1fr);
+    gap: 6px; padding: 16px 24px;
+  }
+  .cell {
+    position: relative; border-radius: 8px; overflow: hidden;
+    cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
+    aspect-ratio: 1; background: #1e293b;
+  }
+  .cell:hover { transform: scale(1.08); z-index: 10; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+  .cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .cell.rbc { border: 3px solid #4ade80; }
+  .cell.retic { border: 3px solid #f87171; }
+  .cell.edited { border-style: dashed; }
+  .cell .badge {
+    position: absolute; bottom: 2px; right: 2px; font-size: 9px;
+    padding: 1px 4px; border-radius: 3px; font-weight: 700;
+  }
+  .cell.rbc .badge { background: #4ade80; color: #0f172a; }
+  .cell.retic .badge { background: #f87171; color: #0f172a; }
+  .cell .conf {
+    position: absolute; top: 2px; left: 2px; font-size: 8px;
+    background: rgba(0,0,0,0.7); color: #e2e8f0; padding: 1px 3px; border-radius: 2px;
+  }
+  .cell .edited-icon {
+    position: absolute; top: 2px; right: 2px; font-size: 9px;
+    background: #f59e0b; color: #0f172a; padding: 1px 3px; border-radius: 2px;
+    font-weight: 700; display: none;
+  }
+  .cell.edited .edited-icon { display: block; }
+
+  /* Modal */
+  .modal-overlay {
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.9); z-index: 200; justify-content: center; align-items: center;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    background: #1e293b; border-radius: 16px; padding: 24px; max-width: 900px;
+    width: 95%; border: 1px solid #334155; display: flex; gap: 24px; align-items: flex-start;
+  }
+  .modal-left { text-align: center; flex-shrink: 0; }
+  .modal-left img {
+    width: 180px; height: 180px; object-fit: cover; border-radius: 8px;
+    image-rendering: pixelated; margin-bottom: 12px; display: block;
+  }
+  .modal-right { flex: 1; }
+  .modal-right .overlay-preview {
+    max-width: 100%; max-height: 350px; border-radius: 8px; margin-bottom: 12px;
+    display: none; border: 1px solid #334155;
+  }
+  .modal-right .overlay-preview.visible { display: block; }
+  .modal .info { color: #94a3b8; font-size: 13px; margin-bottom: 16px; line-height: 1.8; }
+  .modal .info strong { color: #e2e8f0; }
+  .modal .actions { display: flex; gap: 12px; flex-wrap: wrap; }
+  .modal .actions button {
+    padding: 10px 24px; border-radius: 8px; border: none;
+    font-size: 14px; font-weight: 700; cursor: pointer;
+  }
+  .btn-rbc { background: #4ade80; color: #0f172a; }
+  .btn-rbc:hover { background: #22c55e; }
+  .btn-retic { background: #f87171; color: #0f172a; }
+  .btn-retic:hover { background: #ef4444; }
+  .btn-close { background: #475569; color: white; }
+  .btn-close:hover { background: #64748b; }
+
+  .current-label {
+    font-size: 12px; padding: 4px 12px; border-radius: 12px;
+    display: inline-block; margin-bottom: 12px; font-weight: 700;
+  }
+  .current-label.rbc { background: #4ade8033; color: #4ade80; }
+  .current-label.retic { background: #f8717133; color: #f87171; }
+
+  .no-img { display: flex; align-items: center; justify-content: center;
+    width: 100%; height: 100%; color: #475569; font-size: 11px; }
+
+  @media (max-width: 768px) {
+    .grid { grid-template-columns: repeat(3, 1fr); }
+    .modal { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== UPLOAD SCREEN ===== -->
+<div class="upload-screen" id="upload-screen">
+  <h1>Reticulocyte <span>Review</span></h1>
+  <p>Upload the pipeline outputs to review and correct cell classifications.
+     The pathologist can relabel any cell, then download the corrected CSV.</p>
+
+  <div class="upload-steps">
+    <div class="upload-card" id="card-csv" onclick="document.getElementById('input-csv').click()">
+      <div class="step-num">1</div>
+      <div class="step-title">Upload CSV</div>
+      <div class="step-desc">cell_manifest.csv<br>(prediction output)</div>
+      <div class="step-status" id="status-csv"></div>
+      <input type="file" id="input-csv" accept=".csv">
+    </div>
+
+    <div class="upload-card" id="card-crops" onclick="document.getElementById('input-crops').click()">
+      <div class="step-num">2</div>
+      <div class="step-title">Upload Cell Crops</div>
+      <div class="step-desc">Select the <strong>crops</strong> folder<br>(rbc + reticulocytes)</div>
+      <div class="step-status" id="status-crops"></div>
+      <input type="file" id="input-crops" webkitdirectory multiple>
+    </div>
+
+    <div class="upload-card" id="card-overlays" onclick="document.getElementById('input-overlays').click()">
+      <div class="step-num">3</div>
+      <div class="step-title">Upload Overlays</div>
+      <div class="step-desc">Select the <strong>output</strong> folder<br>(annotated images - optional)</div>
+      <div class="step-status" id="status-overlays"></div>
+      <input type="file" id="input-overlays" webkitdirectory multiple>
+    </div>
+  </div>
+
+  <button class="btn-start" id="btn-start" disabled onclick="startReview()">Start Review</button>
+</div>
+
+<!-- ===== REVIEW SCREEN ===== -->
+<div class="review-screen" id="review-screen">
+  <div class="header">
+    <h1>Reticulocyte <span>Review</span></h1>
+    <div class="stats">
+      <div class="stat"><div class="stat-val total" id="stat-total">-</div><div class="stat-label">Total</div></div>
+      <div class="stat"><div class="stat-val rbc" id="stat-rbc">-</div><div class="stat-label">RBC</div></div>
+      <div class="stat"><div class="stat-val retic" id="stat-retic">-</div><div class="stat-label">Retic</div></div>
+      <div class="stat"><span class="relabel-count" id="relabel-count">0 edited</span></div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <label>Filter:</label>
+    <select id="filter-label">
+      <option value="all">All Cells</option>
+      <option value="reticulocyte">Reticulocytes Only</option>
+      <option value="mature_rbc">RBC Only</option>
+      <option value="edited">Edited Only</option>
+    </select>
+
+    <label>Case:</label>
+    <select id="filter-case"><option value="all">All Cases</option></select>
+
+    <label>Sort:</label>
+    <select id="sort-by">
+      <option value="confidence-desc">Confidence High-Low</option>
+      <option value="confidence-asc">Confidence Low-High</option>
+      <option value="case-asc">Case Order</option>
+    </select>
+
+    <label>Per page:</label>
+    <select id="per-page">
+      <option value="60">60</option>
+      <option value="120">120</option>
+      <option value="300">300</option>
+    </select>
+
+    <button class="btn-nav" id="btn-prev" disabled>&larr;</button>
+    <button class="btn-nav" id="btn-next">&rarr;</button>
+    <span class="page-info" id="page-info"></span>
+
+    <button class="btn-export" onclick="downloadCSV()">Download Corrected CSV</button>
+    <button class="btn-new" onclick="resetAll()">New Upload</button>
+  </div>
+
+  <div class="grid" id="grid"></div>
+</div>
+
+<!-- ===== MODAL ===== -->
+<div class="modal-overlay" id="modal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-left">
+      <img id="modal-img" src="">
+      <div id="modal-current-label" class="current-label"></div>
+      <div class="info" id="modal-info"></div>
+      <div class="actions">
+        <button class="btn-rbc" onclick="relabel('mature_rbc')">RBC (M)</button>
+        <button class="btn-retic" onclick="relabel('reticulocyte')">Retic (R)</button>
+        <button class="btn-close" onclick="closeModal()">Close</button>
+      </div>
+    </div>
+    <div class="modal-right">
+      <img class="overlay-preview" id="modal-overlay-img">
+      <div id="modal-overlay-note" style="color:#64748b; font-size:12px;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== STATE =====
+let allCells = [];
+let cropImages = {};   // filename -> objectURL
+let overlayImages = {}; // imageStem -> objectURL  (e.g. "IMG_8594" -> url of overlay)
+let currentPage = 1;
+let selectedCellIdx = null;
+
+// ===== CSV =====
+function parseCSV(text) {
+  const lines = text.trim().split("\n");
+  const headers = lines[0].split(",").map(h => h.trim());
+  return lines.slice(1).map(line => {
+    const vals = line.split(",");
+    const row = {};
+    headers.forEach((h, j) => { row[h] = (vals[j] || "").trim(); });
+    row._original_label = row.label;
+    row._edited = false;
+    return row;
+  });
+}
+
+function generateCSV() {
+  const fields = ["case","image","cell_id","filename","label","confidence",
+                   "detection_score","bbox_x1","bbox_y1","bbox_x2","bbox_y2"];
+  let csv = fields.join(",") + "\n";
+  allCells.forEach(c => { csv += fields.map(f => c[f] || "").join(",") + "\n"; });
+  return csv;
+}
+
+// ===== UPLOAD HANDLERS =====
+document.getElementById("input-csv").onchange = function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    allCells = parseCSV(ev.target.result);
+    document.getElementById("status-csv").textContent = `${allCells.length.toLocaleString()} cells loaded`;
+    document.getElementById("card-csv").classList.add("done");
+    checkReady();
+  };
+  reader.readAsText(file);
+};
+
+document.getElementById("input-crops").onchange = function(e) {
+  const files = e.target.files;
+  let count = 0;
+  for (const f of files) {
+    if (f.name.endsWith(".png") || f.name.endsWith(".jpg") || f.name.endsWith(".jpeg")) {
+      // Use just the filename (not the path) as key so it matches the CSV
+      const fname = f.name;
+      cropImages[fname] = URL.createObjectURL(f);
+      count++;
+    }
+  }
+  document.getElementById("status-crops").textContent = `${count.toLocaleString()} images loaded`;
+  document.getElementById("card-crops").classList.add("done");
+  checkReady();
+  console.log("Sample crop keys:", Object.keys(cropImages).slice(0,5));
+};
+
+document.getElementById("input-overlays").onchange = function(e) {
+  const files = e.target.files;
+  let count = 0;
+  for (const f of files) {
+    if (f.name.endsWith("_overlay.png") || f.name.endsWith("_overlay.jpg")) {
+      // Key by image stem: e.g. "IMG_8594_overlay.png" -> "IMG_8594"
+      const stem = f.name.replace("_overlay.png", "").replace("_overlay.jpg", "");
+      overlayImages[stem] = URL.createObjectURL(f);
+      count++;
+    }
+  }
+  document.getElementById("status-overlays").textContent = `${count} overlays loaded`;
+  document.getElementById("card-overlays").classList.add("done");
+};
+
+function checkReady() {
+  const csvOk = allCells.length > 0;
+  const cropsOk = Object.keys(cropImages).length > 0;
+  document.getElementById("btn-start").disabled = !(csvOk && cropsOk);
+}
+
+// ===== START REVIEW =====
+function startReview() {
+  document.getElementById("upload-screen").classList.add("hidden");
+  document.getElementById("review-screen").classList.add("active");
+
+  const cases = [...new Set(allCells.map(c => c.case))].sort();
+  const sel = document.getElementById("filter-case");
+  sel.innerHTML = '<option value="all">All Cases</option>';
+  cases.forEach(c => {
+    const o = document.createElement("option");
+    o.value = c; o.textContent = c;
+    sel.appendChild(o);
+  });
+
+  updateStats();
+  currentPage = 1;
+  renderGrid();
+}
+
+// ===== STATS =====
+function updateStats() {
+  const rbc = allCells.filter(c => c.label === "mature_rbc").length;
+  const retic = allCells.filter(c => c.label === "reticulocyte").length;
+  const edited = allCells.filter(c => c._edited).length;
+  document.getElementById("stat-total").textContent = allCells.length.toLocaleString();
+  document.getElementById("stat-rbc").textContent = rbc.toLocaleString();
+  document.getElementById("stat-retic").textContent = retic.toLocaleString();
+  document.getElementById("relabel-count").textContent = `${edited} edited`;
+}
+
+// ===== GRID =====
+function getFiltered() {
+  const lf = document.getElementById("filter-label").value;
+  const cf = document.getElementById("filter-case").value;
+  const sv = document.getElementById("sort-by").value;
+
+  let f = [...allCells];
+  if (lf === "edited") f = f.filter(c => c._edited);
+  else if (lf !== "all") f = f.filter(c => c.label === lf);
+  if (cf !== "all") f = f.filter(c => c.case === cf);
+
+  if (sv === "confidence-desc") f.sort((a,b) => parseFloat(b.confidence) - parseFloat(a.confidence));
+  else if (sv === "confidence-asc") f.sort((a,b) => parseFloat(a.confidence) - parseFloat(b.confidence));
+  else f.sort((a,b) => a.case.localeCompare(b.case) || a.image.localeCompare(b.image) || parseInt(a.cell_id) - parseInt(b.cell_id));
+
+  return f;
+}
+
+function renderGrid() {
+  const pp = parseInt(document.getElementById("per-page").value);
+  const filtered = getFiltered();
+  const tp = Math.max(1, Math.ceil(filtered.length / pp));
+  if (currentPage > tp) currentPage = tp;
+
+  const start = (currentPage - 1) * pp;
+  const page = filtered.slice(start, start + pp);
+
+  document.getElementById("page-info").textContent = `Page ${currentPage}/${tp} (${filtered.length.toLocaleString()})`;
+  document.getElementById("btn-prev").disabled = currentPage <= 1;
+  document.getElementById("btn-next").disabled = currentPage >= tp;
+
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+
+  page.forEach(cell => {
+    const isR = cell.label === "reticulocyte";
+    const div = document.createElement("div");
+    div.className = `cell ${isR ? "retic" : "rbc"} ${cell._edited ? "edited" : ""}`;
+    div.onclick = () => openModal(cell);
+
+    const imgSrc = cropImages[cell.filename];
+    if (imgSrc) {
+      div.innerHTML = `
+        <img src="${imgSrc}" loading="lazy">
+        <span class="conf">${(parseFloat(cell.confidence)*100).toFixed(0)}%</span>
+        <span class="badge">${isR ? "RET" : "RBC"}</span>
+        <span class="edited-icon">E</span>`;
+    } else {
+      div.innerHTML = `<div class="no-img">${cell.filename.substring(0,20)}...</div>
+        <span class="badge">${isR ? "RET" : "RBC"}</span>`;
+    }
+    grid.appendChild(div);
+  });
+}
+
+// ===== MODAL =====
+function openModal(cell) {
+  selectedCellIdx = allCells.indexOf(cell);
+  const isR = cell.label === "reticulocyte";
+
+  document.getElementById("modal-img").src = cropImages[cell.filename] || "";
+  document.getElementById("modal-current-label").textContent =
+    (isR ? "RETICULOCYTE" : "MATURE RBC") + (cell._edited ? " (EDITED)" : "");
+  document.getElementById("modal-current-label").className = `current-label ${isR ? "retic" : "rbc"}`;
+
+  document.getElementById("modal-info").innerHTML = `
+    <strong>File:</strong> ${cell.filename}<br>
+    <strong>Case:</strong> ${cell.case}<br>
+    <strong>Source:</strong> ${cell.image}<br>
+    <strong>Confidence:</strong> ${(parseFloat(cell.confidence)*100).toFixed(1)}%<br>
+    <strong>Detection:</strong> ${(parseFloat(cell.detection_score)*100).toFixed(1)}%
+    ${cell._edited ? `<br><strong>Original:</strong> ${cell._original_label}` : ""}`;
+
+  // Show overlay if available
+  const imgStem = cell.image.replace(/\.[^.]+$/, ""); // "IMG_8594.JPG" -> "IMG_8594"
+  const overlayEl = document.getElementById("modal-overlay-img");
+  const noteEl = document.getElementById("modal-overlay-note");
+
+  if (overlayImages[imgStem]) {
+    overlayEl.src = overlayImages[imgStem];
+    overlayEl.classList.add("visible");
+    noteEl.textContent = "Annotated source image with all detections";
+  } else {
+    overlayEl.classList.remove("visible");
+    overlayEl.src = "";
+    noteEl.textContent = Object.keys(overlayImages).length > 0
+      ? "No overlay found for " + cell.image
+      : "No overlays uploaded";
+  }
+
+  document.getElementById("modal").classList.add("active");
+}
+
+function closeModal(e) {
+  if (!e || e.target.id === "modal") {
+    document.getElementById("modal").classList.remove("active");
+    selectedCellIdx = null;
+  }
+}
+
+function relabel(newLabel) {
+  if (selectedCellIdx === null) return;
+  const cell = allCells[selectedCellIdx];
+  if (cell.label === newLabel) { closeModal(); return; }
+  cell.label = newLabel;
+  cell._edited = true;
+  closeModal();
+  updateStats();
+  renderGrid();
+}
+
+// ===== DOWNLOAD =====
+function downloadCSV() {
+  const csv = generateCSV();
+  const blob = new Blob([csv], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "cell_labels_corrected.csv";
+  a.click();
+}
+
+// ===== RESET =====
+function resetAll() {
+  const edited = allCells.filter(c => c._edited).length;
+  if (edited > 0 && !confirm(`You have ${edited} edits. Sure you want to start over?`)) return;
+  Object.values(cropImages).forEach(URL.revokeObjectURL);
+  Object.values(overlayImages).forEach(URL.revokeObjectURL);
+  allCells = []; cropImages = {}; overlayImages = {};
+  currentPage = 1; selectedCellIdx = null;
+  document.getElementById("upload-screen").classList.remove("hidden");
+  document.getElementById("review-screen").classList.remove("active");
+  ["card-csv","card-crops","card-overlays"].forEach(id => document.getElementById(id).classList.remove("done"));
+  ["status-csv","status-crops","status-overlays"].forEach(id => document.getElementById(id).textContent = "");
+  ["input-csv","input-crops","input-overlays"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("btn-start").disabled = true;
+}
+
+// ===== KEYBOARD =====
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") closeModal();
+  if (selectedCellIdx !== null && e.key === "r") relabel("reticulocyte");
+  if (selectedCellIdx !== null && e.key === "m") relabel("mature_rbc");
+  if (selectedCellIdx === null && e.key === "ArrowLeft" && currentPage > 1) { currentPage--; renderGrid(); }
+  if (selectedCellIdx === null && e.key === "ArrowRight") { currentPage++; renderGrid(); }
+});
+
+// ===== FILTER LISTENERS =====
+["filter-label","filter-case","sort-by","per-page"].forEach(id => {
+  document.getElementById(id).onchange = () => { currentPage = 1; renderGrid(); };
+});
+document.getElementById("btn-prev").onclick = () => { if (currentPage > 1) { currentPage--; renderGrid(); } };
+document.getElementById("btn-next").onclick = () => { currentPage++; renderGrid(); };
+</script>
+</body>
+</html>

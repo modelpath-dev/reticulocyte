@@ -1,0 +1,8 @@
+{
+  "name": "reticulocyte",
+  "buildCommand": null,
+  "outputDirectory": ".",
+  "routes": [
+    { "src": "/", "dest": "/index.html" }
+  ]
+}

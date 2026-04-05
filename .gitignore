@@ -1,0 +1,8 @@
+# Everything except frontend files
+*
+
+# Allow only frontend essentials
+!.gitignore
+!index.html
+!vercel.json
+!README.md

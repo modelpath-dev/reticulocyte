@@ -220,6 +220,8 @@
   </div>
 
   <button class="btn-start" id="btn-start" disabled onclick="startReview()">Start Review</button>
+  <div style="margin-top: 20px; color: #64748b; font-size: 13px;">— or —</div>
+  <button class="btn-start" style="background:#10b981" onclick="loadFromHF()">Load Demo Dataset (Online)</button>
 </div>
 
 <!-- ===== REVIEW SCREEN ===== -->
@@ -270,6 +272,7 @@
 
     <button class="btn-export" onclick="downloadCSV()">Download Corrected CSV</button>
     <button class="btn-new" onclick="resetAll()">New Upload</button>
+    <button class="btn-new" style="background:#ef4444;color:white" onclick="clearProgress()">Clear Saved Edits</button>
   </div>
 
   <div class="grid" id="grid"></div>
@@ -381,6 +384,9 @@ function checkReady() {
 
 // ===== START REVIEW =====
 function startReview() {
+  // Restore any saved progress first
+  const restored = restoreProgress();
+
   document.getElementById("upload-screen").classList.add("hidden");
   document.getElementById("review-screen").classList.add("active");
 
@@ -392,6 +398,12 @@ function startReview() {
     o.value = c; o.textContent = c;
     sel.appendChild(o);
   });
+
+  if (restored > 0) {
+    setTimeout(() => {
+      alert(`Restored ${restored} previous edits from your last session.`);
+    }, 200);
+  }
 
   updateStats();
   currentPage = 1;
@@ -542,6 +554,7 @@ function relabel(newLabel) {
   if (cell.label === newLabel) { closeModal(); return; }
   cell.label = newLabel;
   cell._edited = true;
+  saveProgress();
   closeModal();
   updateStats();
   renderGrid();
@@ -573,34 +586,98 @@ function resetAll() {
   document.getElementById("btn-start").disabled = true;
 }
 
-// ===== SAMPLE DATA LOADER =====
-function loadSample() {
-  if (!window.SAMPLE_DATA) {
-    alert("Sample data not available. Make sure sample_data.js is loaded.");
-    return;
+// ===== HF DATASET LOADER =====
+const HF_DATASET = "amazing-chandan/reticulocyte-cells";
+const HF_BASE = `https://huggingface.co/datasets/${HF_DATASET}/resolve/main`;
+
+async function loadFromHF() {
+  try {
+    document.getElementById("upload-screen").innerHTML =
+      '<div style="color:#94a3b8; font-size:18px;">Loading dataset from Hugging Face...</div>';
+
+    // Fetch CSV
+    const csvRes = await fetch(`${HF_BASE}/cell_manifest.csv`);
+    if (!csvRes.ok) throw new Error("Failed to fetch CSV");
+    const csvText = await csvRes.text();
+    allCells = parseCSV(csvText);
+
+    // Build image URL map (lazy fetched by browser when img is visible)
+    cropImages = {};
+    allCells.forEach(c => {
+      const subdir = c.label === "reticulocyte" ? "reticulocytes" : "rbc";
+      cropImages[c.filename] = `${HF_BASE}/cell_crops/${subdir}/${encodeURIComponent(c.filename)}`;
+    });
+
+    // Build overlay URL map keyed by image stem
+    overlayImages = {};
+    const seenStems = new Set();
+    allCells.forEach(c => {
+      const stem = c.image.replace(/\.[^.]+$/, "");
+      if (!seenStems.has(stem)) {
+        seenStems.add(stem);
+        overlayImages[stem] = `${HF_BASE}/annotated_images/${c.case}/${encodeURIComponent(stem + "_overlay.png")}`;
+      }
+    });
+
+    // Restore saved progress if any
+    restoreProgress();
+
+    startReview();
+  } catch (e) {
+    alert("Error loading from HF: " + e.message);
+    location.reload();
   }
-  const data = window.SAMPLE_DATA;
+}
 
-  // Build cells from sample
-  allCells = data.cells.map(c => ({
-    ...c,
-    _original_label: c.label,
-    _edited: false
-  }));
+// ===== PROGRESS PERSISTENCE =====
+const STORAGE_KEY = "reticulocyte_edits_v1";
 
-  // Build cropImages map (data URLs)
-  cropImages = {};
-  data.cells.forEach(c => {
-    cropImages[c.filename] = c.image_b64;
-  });
+function saveProgress() {
+  try {
+    const edits = {};
+    allCells.forEach(c => {
+      if (c._edited) {
+        edits[c.filename] = { label: c.label, original: c._original_label };
+      }
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      edits,
+      timestamp: Date.now(),
+      total: allCells.length
+    }));
+  } catch (e) {
+    console.warn("Failed to save progress:", e);
+  }
+}
 
-  // Build overlayImages map
-  overlayImages = {};
-  Object.entries(data.overlays || {}).forEach(([stem, b64]) => {
-    overlayImages[stem] = b64;
-  });
+function restoreProgress() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return 0;
+    const data = JSON.parse(raw);
+    let restored = 0;
+    allCells.forEach(c => {
+      if (data.edits[c.filename]) {
+        c.label = data.edits[c.filename].label;
+        c._edited = true;
+        restored++;
+      }
+    });
+    if (restored > 0) {
+      console.log(`Restored ${restored} previous edits`);
+    }
+    return restored;
+  } catch (e) {
+    console.warn("Failed to restore progress:", e);
+    return 0;
+  }
+}
 
-  startReview();
+function clearProgress() {
+  if (confirm("Clear all saved edits? This cannot be undone.")) {
+    localStorage.removeItem(STORAGE_KEY);
+    location.reload();
+  }
 }
 
 // ===== KEYBOARD =====

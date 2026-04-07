@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Reticulocyte Review - Pathologist UI</title>
+<script src="sample_data.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; }
@@ -106,6 +107,8 @@
   .cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .cell.rbc { border: 3px solid #4ade80; }
   .cell.retic { border: 3px solid #f87171; }
+  .cell.wbc { border: 3px solid #a78bfa; }
+  .cell.noise { border: 3px solid #94a3b8; }
   .cell.edited { border-style: dashed; }
   .cell .badge {
     position: absolute; bottom: 2px; right: 2px; font-size: 9px;
@@ -113,6 +116,8 @@
   }
   .cell.rbc .badge { background: #4ade80; color: #0f172a; }
   .cell.retic .badge { background: #f87171; color: #0f172a; }
+  .cell.wbc .badge { background: #a78bfa; color: #0f172a; }
+  .cell.noise .badge { background: #94a3b8; color: #0f172a; }
   .cell .conf {
     position: absolute; top: 2px; left: 2px; font-size: 8px;
     background: rgba(0,0,0,0.7); color: #e2e8f0; padding: 1px 3px; border-radius: 2px;
@@ -156,6 +161,10 @@
   .btn-rbc:hover { background: #22c55e; }
   .btn-retic { background: #f87171; color: #0f172a; }
   .btn-retic:hover { background: #ef4444; }
+  .btn-wbc { background: #a78bfa; color: #0f172a; }
+  .btn-wbc:hover { background: #8b5cf6; }
+  .btn-noise { background: #94a3b8; color: #0f172a; }
+  .btn-noise:hover { background: #64748b; }
   .btn-close { background: #475569; color: white; }
   .btn-close:hover { background: #64748b; }
 
@@ -165,6 +174,8 @@
   }
   .current-label.rbc { background: #4ade8033; color: #4ade80; }
   .current-label.retic { background: #f8717133; color: #f87171; }
+  .current-label.wbc { background: #a78bfa33; color: #a78bfa; }
+  .current-label.noise { background: #94a3b833; color: #94a3b8; }
 
   .no-img { display: flex; align-items: center; justify-content: center;
     width: 100%; height: 100%; color: #475569; font-size: 11px; }
@@ -210,6 +221,7 @@
   </div>
 
   <button class="btn-start" id="btn-start" disabled onclick="startReview()">Start Review</button>
+  <button class="btn-start" style="background:#10b981" onclick="loadSample()">Try with Sample Data</button>
 </div>
 
 <!-- ===== REVIEW SCREEN ===== -->
@@ -220,6 +232,8 @@
       <div class="stat"><div class="stat-val total" id="stat-total">-</div><div class="stat-label">Total</div></div>
       <div class="stat"><div class="stat-val rbc" id="stat-rbc">-</div><div class="stat-label">RBC</div></div>
       <div class="stat"><div class="stat-val retic" id="stat-retic">-</div><div class="stat-label">Retic</div></div>
+      <div class="stat"><div class="stat-val wbc" id="stat-wbc" style="color:#a78bfa">-</div><div class="stat-label">WBC</div></div>
+      <div class="stat"><div class="stat-val noise" id="stat-noise" style="color:#94a3b8">-</div><div class="stat-label">Noise</div></div>
       <div class="stat"><span class="relabel-count" id="relabel-count">0 edited</span></div>
     </div>
   </div>
@@ -230,6 +244,8 @@
       <option value="all">All Cells</option>
       <option value="reticulocyte">Reticulocytes Only</option>
       <option value="mature_rbc">RBC Only</option>
+      <option value="wbc">WBC Only</option>
+      <option value="noise">Noise Only</option>
       <option value="edited">Edited Only</option>
     </select>
 
@@ -271,6 +287,8 @@
       <div class="actions">
         <button class="btn-rbc" onclick="relabel('mature_rbc')">RBC (M)</button>
         <button class="btn-retic" onclick="relabel('reticulocyte')">Retic (R)</button>
+        <button class="btn-wbc" onclick="relabel('wbc')">WBC (W)</button>
+        <button class="btn-noise" onclick="relabel('noise')">Noise (N)</button>
         <button class="btn-close" onclick="closeModal()">Close</button>
       </div>
     </div>
@@ -386,11 +404,37 @@ function startReview() {
 function updateStats() {
   const rbc = allCells.filter(c => c.label === "mature_rbc").length;
   const retic = allCells.filter(c => c.label === "reticulocyte").length;
+  const wbc = allCells.filter(c => c.label === "wbc").length;
+  const noise = allCells.filter(c => c.label === "noise").length;
   const edited = allCells.filter(c => c._edited).length;
   document.getElementById("stat-total").textContent = allCells.length.toLocaleString();
   document.getElementById("stat-rbc").textContent = rbc.toLocaleString();
   document.getElementById("stat-retic").textContent = retic.toLocaleString();
+  document.getElementById("stat-wbc").textContent = wbc.toLocaleString();
+  document.getElementById("stat-noise").textContent = noise.toLocaleString();
   document.getElementById("relabel-count").textContent = `${edited} edited`;
+}
+
+function labelClass(label) {
+  if (label === "reticulocyte") return "retic";
+  if (label === "wbc") return "wbc";
+  if (label === "noise") return "noise";
+  return "rbc";
+}
+
+function labelBadge(label) {
+  if (label === "reticulocyte") return "RET";
+  if (label === "wbc") return "WBC";
+  if (label === "noise") return "NOISE";
+  return "RBC";
+}
+
+function labelDisplayName(label) {
+  if (label === "reticulocyte") return "RETICULOCYTE";
+  if (label === "wbc") return "WHITE BLOOD CELL";
+  if (label === "noise") return "NOISE";
+  if (label === "mature_rbc") return "MATURE RBC";
+  return label.toUpperCase();
 }
 
 // ===== GRID =====
@@ -428,9 +472,10 @@ function renderGrid() {
   grid.innerHTML = "";
 
   page.forEach(cell => {
-    const isR = cell.label === "reticulocyte";
+    const cls = labelClass(cell.label);
+    const badge = labelBadge(cell.label);
     const div = document.createElement("div");
-    div.className = `cell ${isR ? "retic" : "rbc"} ${cell._edited ? "edited" : ""}`;
+    div.className = `cell ${cls} ${cell._edited ? "edited" : ""}`;
     div.onclick = () => openModal(cell);
 
     const imgSrc = cropImages[cell.filename];
@@ -438,11 +483,11 @@ function renderGrid() {
       div.innerHTML = `
         <img src="${imgSrc}" loading="lazy">
         <span class="conf">${(parseFloat(cell.confidence)*100).toFixed(0)}%</span>
-        <span class="badge">${isR ? "RET" : "RBC"}</span>
+        <span class="badge">${badge}</span>
         <span class="edited-icon">E</span>`;
     } else {
       div.innerHTML = `<div class="no-img">${cell.filename.substring(0,20)}...</div>
-        <span class="badge">${isR ? "RET" : "RBC"}</span>`;
+        <span class="badge">${badge}</span>`;
     }
     grid.appendChild(div);
   });
@@ -455,8 +500,8 @@ function openModal(cell) {
 
   document.getElementById("modal-img").src = cropImages[cell.filename] || "";
   document.getElementById("modal-current-label").textContent =
-    (isR ? "RETICULOCYTE" : "MATURE RBC") + (cell._edited ? " (EDITED)" : "");
-  document.getElementById("modal-current-label").className = `current-label ${isR ? "retic" : "rbc"}`;
+    labelDisplayName(cell.label) + (cell._edited ? " (EDITED)" : "");
+  document.getElementById("modal-current-label").className = `current-label ${labelClass(cell.label)}`;
 
   document.getElementById("modal-info").innerHTML = `
     <strong>File:</strong> ${cell.filename}<br>
@@ -530,11 +575,43 @@ function resetAll() {
   document.getElementById("btn-start").disabled = true;
 }
 
+// ===== SAMPLE DATA LOADER =====
+function loadSample() {
+  if (!window.SAMPLE_DATA) {
+    alert("Sample data not available. Make sure sample_data.js is loaded.");
+    return;
+  }
+  const data = window.SAMPLE_DATA;
+
+  // Build cells from sample
+  allCells = data.cells.map(c => ({
+    ...c,
+    _original_label: c.label,
+    _edited: false
+  }));
+
+  // Build cropImages map (data URLs)
+  cropImages = {};
+  data.cells.forEach(c => {
+    cropImages[c.filename] = c.image_b64;
+  });
+
+  // Build overlayImages map
+  overlayImages = {};
+  Object.entries(data.overlays || {}).forEach(([stem, b64]) => {
+    overlayImages[stem] = b64;
+  });
+
+  startReview();
+}
+
 // ===== KEYBOARD =====
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") closeModal();
   if (selectedCellIdx !== null && e.key === "r") relabel("reticulocyte");
   if (selectedCellIdx !== null && e.key === "m") relabel("mature_rbc");
+  if (selectedCellIdx !== null && e.key === "w") relabel("wbc");
+  if (selectedCellIdx !== null && e.key === "n") relabel("noise");
   if (selectedCellIdx === null && e.key === "ArrowLeft" && currentPage > 1) { currentPage--; renderGrid(); }
   if (selectedCellIdx === null && e.key === "ArrowRight") { currentPage++; renderGrid(); }
 });

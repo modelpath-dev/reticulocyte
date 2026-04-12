@@ -11,4 +11,5 @@
 !vercel.json
 !README.md
 !sample_data.js
+!preloaded_csv.js
 .vercel

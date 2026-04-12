@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Reticulocyte Review - Pathologist UI</title>
+<script src="preloaded_csv.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; }
@@ -190,30 +191,22 @@
 <!-- ===== UPLOAD SCREEN ===== -->
 <div class="upload-screen" id="upload-screen">
   <h1>Reticulocyte <span>Review</span></h1>
-  <p>Upload the pipeline outputs to review and correct cell classifications.
-     The pathologist can relabel any cell, then download the corrected CSV.</p>
+  <p>Predictions are preloaded (27,676 cells). Upload the cell crop images and annotated overlays to start reviewing.</p>
+  <div id="preload-status" style="color:#4ade80; font-size:14px; margin-bottom:12px;"></div>
 
   <div class="upload-steps">
-    <div class="upload-card" id="card-csv" onclick="document.getElementById('input-csv').click()">
-      <div class="step-num">1</div>
-      <div class="step-title">Upload CSV</div>
-      <div class="step-desc">cell_manifest.csv<br>(prediction output)</div>
-      <div class="step-status" id="status-csv"></div>
-      <input type="file" id="input-csv" accept=".csv">
-    </div>
-
     <div class="upload-card" id="card-crops" onclick="document.getElementById('input-crops').click()">
-      <div class="step-num">2</div>
+      <div class="step-num">1</div>
       <div class="step-title">Upload Cell Crops</div>
-      <div class="step-desc">Select the <strong>crops</strong> folder<br>(rbc + reticulocytes)</div>
+      <div class="step-desc">Select the <strong>cell_crops</strong> folder<br>(rbc + reticulocytes)</div>
       <div class="step-status" id="status-crops"></div>
       <input type="file" id="input-crops" webkitdirectory multiple>
     </div>
 
     <div class="upload-card" id="card-overlays" onclick="document.getElementById('input-overlays').click()">
-      <div class="step-num">3</div>
-      <div class="step-title">Upload Overlays</div>
-      <div class="step-desc">Select the <strong>output</strong> folder<br>(annotated images - optional)</div>
+      <div class="step-num">2</div>
+      <div class="step-title">Upload Overlays (Optional)</div>
+      <div class="step-desc">Select the <strong>annotated_images</strong> folder</div>
       <div class="step-status" id="status-overlays"></div>
       <input type="file" id="input-overlays" webkitdirectory multiple>
     </div>
@@ -339,20 +332,23 @@ function generateCSV() {
   return csv;
 }
 
-// ===== UPLOAD HANDLERS =====
-document.getElementById("input-csv").onchange = function(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    allCells = parseCSV(ev.target.result);
-    document.getElementById("status-csv").textContent = `${allCells.length.toLocaleString()} cells loaded`;
-    document.getElementById("card-csv").classList.add("done");
-    checkReady();
-  };
-  reader.readAsText(file);
-};
+// ===== LOAD PRELOADED CSV =====
+function loadPreloadedCSV() {
+  if (!window.PRELOADED_CSV) return;
+  allCells = window.PRELOADED_CSV.map(r => ({
+    case: r.c, image: r.i, cell_id: r.id, filename: r.f,
+    label: r.l, confidence: r.cf, detection_score: r.ds,
+    bbox_x1: r.b.split(",")[0], bbox_y1: r.b.split(",")[1],
+    bbox_x2: r.b.split(",")[2], bbox_y2: r.b.split(",")[3],
+    model_prediction: r.mp, openai_prediction: r.op, openai_reasoning: r.or,
+    _original_label: r.l, _edited: false
+  }));
+  document.getElementById("preload-status").textContent =
+    `${allCells.length.toLocaleString()} cells loaded with model + OpenAI predictions`;
+}
+loadPreloadedCSV();
 
+// ===== UPLOAD HANDLERS =====
 document.getElementById("input-crops").onchange = function(e) {
   const files = e.target.files;
   let count = 0;
@@ -386,9 +382,8 @@ document.getElementById("input-overlays").onchange = function(e) {
 };
 
 function checkReady() {
-  const csvOk = allCells.length > 0;
   const cropsOk = Object.keys(cropImages).length > 0;
-  document.getElementById("btn-start").disabled = !(csvOk && cropsOk);
+  document.getElementById("btn-start").disabled = !cropsOk;
 }
 
 // ===== START REVIEW =====
@@ -595,13 +590,14 @@ function resetAll() {
   if (edited > 0 && !confirm(`You have ${edited} edits. Sure you want to start over?`)) return;
   Object.values(cropImages).forEach(URL.revokeObjectURL);
   Object.values(overlayImages).forEach(URL.revokeObjectURL);
-  allCells = []; cropImages = {}; overlayImages = {};
+  cropImages = {}; overlayImages = {};
   currentPage = 1; selectedCellIdx = null;
+  loadPreloadedCSV();
   document.getElementById("upload-screen").classList.remove("hidden");
   document.getElementById("review-screen").classList.remove("active");
-  ["card-csv","card-crops","card-overlays"].forEach(id => document.getElementById(id).classList.remove("done"));
-  ["status-csv","status-crops","status-overlays"].forEach(id => document.getElementById(id).textContent = "");
-  ["input-csv","input-crops","input-overlays"].forEach(id => document.getElementById(id).value = "");
+  ["card-crops","card-overlays"].forEach(id => document.getElementById(id).classList.remove("done"));
+  ["status-crops","status-overlays"].forEach(id => document.getElementById(id).textContent = "");
+  ["input-crops","input-overlays"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("btn-start").disabled = true;
 }
 

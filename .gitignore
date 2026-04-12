@@ -1,3 +1,7 @@
+# NEVER commit secrets
+.env
+.env.*
+
 # Everything except frontend files
 *
 

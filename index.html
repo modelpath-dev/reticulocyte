@@ -220,8 +220,6 @@
   </div>
 
   <button class="btn-start" id="btn-start" disabled onclick="startReview()">Start Review</button>
-  <div style="margin-top: 20px; color: #64748b; font-size: 13px;">— or —</div>
-  <button class="btn-start" style="background:#10b981" onclick="loadFromHF()">Load Demo Dataset (Online)</button>
 </div>
 
 <!-- ===== REVIEW SCREEN ===== -->
@@ -323,10 +321,21 @@ function parseCSV(text) {
 }
 
 function generateCSV() {
-  const fields = ["case","image","cell_id","filename","label","confidence",
-                   "detection_score","bbox_x1","bbox_y1","bbox_x2","bbox_y2"];
+  // Include all original columns + new ones
+  const baseFields = ["case","image","cell_id","filename","label","confidence",
+                       "detection_score","bbox_x1","bbox_y1","bbox_x2","bbox_y2"];
+  const extraFields = ["model_prediction","openai_prediction","openai_reasoning"];
+  const hasOpenAI = allCells.some(c => c.openai_prediction);
+  const fields = hasOpenAI ? [...baseFields, ...extraFields] : baseFields;
   let csv = fields.join(",") + "\n";
-  allCells.forEach(c => { csv += fields.map(f => c[f] || "").join(",") + "\n"; });
+  allCells.forEach(c => {
+    csv += fields.map(f => {
+      let val = c[f] || "";
+      // Escape commas in reasoning
+      if (typeof val === "string" && val.includes(",")) val = `"${val}"`;
+      return val;
+    }).join(",") + "\n";
+  });
   return csv;
 }
 
@@ -444,7 +453,14 @@ function labelDisplayName(label) {
   if (label === "wbc") return "WHITE BLOOD CELL";
   if (label === "noise") return "NOISE";
   if (label === "mature_rbc") return "MATURE RBC";
-  return label.toUpperCase();
+  return (label || "").toUpperCase();
+}
+
+function labelColor(label) {
+  if (label === "reticulocyte") return "#f87171";
+  if (label === "wbc") return "#a78bfa";
+  if (label === "noise") return "#94a3b8";
+  return "#4ade80";
 }
 
 // ===== GRID =====
@@ -513,13 +529,16 @@ function openModal(cell) {
     labelDisplayName(cell.label) + (cell._edited ? " (EDITED)" : "");
   document.getElementById("modal-current-label").className = `current-label ${labelClass(cell.label)}`;
 
+  const hasOpenAI = cell.openai_prediction && cell.openai_prediction !== "";
   document.getElementById("modal-info").innerHTML = `
     <strong>File:</strong> ${cell.filename}<br>
-    <strong>Case:</strong> ${cell.case}<br>
-    <strong>Source:</strong> ${cell.image}<br>
+    <strong>Case:</strong> ${cell.case} | <strong>Source:</strong> ${cell.image}<br>
     <strong>Confidence:</strong> ${(parseFloat(cell.confidence)*100).toFixed(1)}%<br>
-    <strong>Detection:</strong> ${(parseFloat(cell.detection_score)*100).toFixed(1)}%
-    ${cell._edited ? `<br><strong>Original:</strong> ${cell._original_label}` : ""}`;
+    <hr style="border-color:#334155; margin:8px 0">
+    <strong>Model prediction:</strong> <span style="color:${labelColor(cell.model_prediction || cell.label)}">${labelDisplayName(cell.model_prediction || cell.label)}</span><br>
+    ${hasOpenAI ? `<strong>OpenAI prediction:</strong> <span style="color:${labelColor(cell.openai_prediction)}">${labelDisplayName(cell.openai_prediction)}</span><br>
+    <strong>OpenAI reasoning:</strong> <em>${cell.openai_reasoning || ""}</em><br>` : ""}
+    ${cell._edited ? `<hr style="border-color:#334155; margin:8px 0"><strong>Your label:</strong> <span style="color:${labelColor(cell.label)}">${labelDisplayName(cell.label)}</span>` : ""}`;
 
   // Show overlay if available
   const imgStem = cell.image.replace(/\.[^.]+$/, ""); // "IMG_8594.JPG" -> "IMG_8594"
@@ -584,49 +603,6 @@ function resetAll() {
   ["status-csv","status-crops","status-overlays"].forEach(id => document.getElementById(id).textContent = "");
   ["input-csv","input-crops","input-overlays"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("btn-start").disabled = true;
-}
-
-// ===== HF DATASET LOADER =====
-const HF_DATASET = "amazing-chandan/reticulocyte-cells";
-const HF_BASE = `https://huggingface.co/datasets/${HF_DATASET}/resolve/main`;
-
-async function loadFromHF() {
-  try {
-    document.getElementById("upload-screen").innerHTML =
-      '<div style="color:#94a3b8; font-size:18px;">Loading dataset from Hugging Face...</div>';
-
-    // Fetch CSV
-    const csvRes = await fetch(`${HF_BASE}/cell_manifest.csv`);
-    if (!csvRes.ok) throw new Error("Failed to fetch CSV");
-    const csvText = await csvRes.text();
-    allCells = parseCSV(csvText);
-
-    // Build image URL map (lazy fetched by browser when img is visible)
-    cropImages = {};
-    allCells.forEach(c => {
-      const subdir = c.label === "reticulocyte" ? "reticulocytes" : "rbc";
-      cropImages[c.filename] = `${HF_BASE}/cell_crops/${subdir}/${encodeURIComponent(c.filename)}`;
-    });
-
-    // Build overlay URL map keyed by image stem
-    overlayImages = {};
-    const seenStems = new Set();
-    allCells.forEach(c => {
-      const stem = c.image.replace(/\.[^.]+$/, "");
-      if (!seenStems.has(stem)) {
-        seenStems.add(stem);
-        overlayImages[stem] = `${HF_BASE}/annotated_images/${c.case}/${encodeURIComponent(stem + "_overlay.png")}`;
-      }
-    });
-
-    // Restore saved progress if any
-    restoreProgress();
-
-    startReview();
-  } catch (e) {
-    alert("Error loading from HF: " + e.message);
-    location.reload();
-  }
 }
 
 // ===== PROGRESS PERSISTENCE =====

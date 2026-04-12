@@ -292,7 +292,7 @@ mature / reticulocyte (threshold=0.5)
 
 ### `preprocess.py` — Data Preparation
 
-Key functions and their roles:
+Key functions:
 
 | Function | Purpose |
 |----------|---------|
